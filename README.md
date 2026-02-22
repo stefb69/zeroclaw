@@ -605,6 +605,25 @@ WhatsApp uses Meta's Cloud API with webhooks (push-based, not polling):
 
 6. **Test:** Send a message to your WhatsApp Business number — ZeroClaw will respond via the LLM.
 
+### Security Analysis (2026-02-22)
+
+Independent security audit of the runtime tool surfaces. Grades reflect the current state of defense-in-depth across each subsystem.
+
+| # | Surface | Risk area | Grade | Finding | Recommended action |
+|---|---|---|:---:|---|---|
+| 1 | `http_request` | MITM / protocol downgrade | **B** | HTTP URLs accepted alongside HTTPS. No protocol enforcement option. | Add `https_only = true` config option; reject plain HTTP unless explicitly opted-out. |
+| 2 | `http_request` | SSRF — DNS rebinding | **B+** | IP block-list validated pre-resolution. Post-connection IP not re-checked. | Document egress proxy requirement; add post-connect IP re-validation for high-risk deployments. |
+| 3 | `file_write` | Path traversal | **A-** | Workspace scoping and symlink canonicalization present. No explicit regression test for `../` sequences. | Add dedicated path-traversal unit test; extend to cover null bytes and symlink escape. |
+| 4 | `shell` | Network egress | **B** | Landlock restricts filesystem. No filtering of network-capable commands (`curl`, `wget`, `nc`). | Add optional `blocked_commands` list to `SecurityPolicy`; document egress expectations. |
+| 5 | `git_operations` | Unintended push / exfiltration | **B+** | `can_act()` and `record_action()` gates present. Mutating ops (`push`, `commit`) not explicitly gated to `Supervised` autonomy level. | Enforce `AutonomyLevel::Supervised` for all write/push operations; add integration test. |
+| 6 | `browser` / `browser_open` | SSRF-adjacent / credential phishing | **B** | URL allowlist present. Navigation to localhost not explicitly blocked. Keyboard input can target any focused page. | Block `localhost` / RFC-1918 navigation by default; document allowlist behavior in security reference. |
+| 7 | `delegate` | Prompt injection via sub-agent | **B-** | Sub-agent spawning supported. No documented trust boundary between parent and child agent outputs. | Treat sub-agent output as untrusted data; add validation layer before acting on delegated results. |
+| 8 | Compiler hygiene | Signal degradation | **B+** | Multiple `#[allow(unused_imports)]` suppress warnings in `src/security/mod.rs` and `src/tools/mod.rs`. | Clean up unused imports; remove broad `allow` suppression to keep compiler signal reliable. |
+
+**Grade scale:** A = strong controls, well-tested · B = adequate controls, gaps identified · C = significant gaps · D = critical issues present
+
+> Full security model and configuration reference: [docs/security/README.md](docs/security/README.md)
+
 ## Configuration
 
 Config: `~/.zeroclaw/config.toml` (created by `onboard`)
